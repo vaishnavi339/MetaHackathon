@@ -1,0 +1,16 @@
+[project]
+name = "customer-support-env"
+version = "0.1.0"
+description = "OpenEnv customer support simulation environment"
+authors = [{ name = "Vaishnavi Singh" }]
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic"
+]
+
+[tool.setuptools]
+packages = ["env"]
