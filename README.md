@@ -1,3 +1,18 @@
+---
+title: Customer Support Env
+emoji: 🤖
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_file: app.py
+pinned: false
+---
+
+
+
+
+
+
 # AI Customer Support Simulation Environment
 
 This repository provides a production-ready OpenEnv environment for training and evaluating agents on realistic customer support workflows. The environment is deterministic, fully typed with Pydantic, and designed for hackathon-style evaluation where stable scoring, real-world utility, and clean interfaces matter.
