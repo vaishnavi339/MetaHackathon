@@ -24,3 +24,7 @@ def step(action: dict):
         "done": done,
         "info": info
     }
+
+# 🔥 THIS IS THE IMPORTANT PART
+def main():
+    return app
