@@ -1,0 +1,24 @@
+id: customer-support-env
+name: Customer Support Environment
+description: Real-world customer support simulation for training AI agents
+
+entrypoint: env.environment:CustomerSupportEnvironment
+
+observation_space:
+  type: Observation
+
+action_space:
+  type: Action
+
+reward_space:
+  type: Reward
+
+tasks:
+  - id: easy
+    description: FAQ resolution
+  - id: medium
+    description: Angry customer handling
+  - id: hard
+    description: Multi-step escalation
+
+max_steps: 8
