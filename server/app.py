@@ -1,10 +1,13 @@
 from fastapi import FastAPI
+
 from env.environment import CustomerSupportEnvironment
 from env.models import Action
+
 
 app = FastAPI()
 
 env = CustomerSupportEnvironment(task_id="easy")
+
 
 @app.post("/reset")
 def reset():
@@ -12,6 +15,7 @@ def reset():
     env = CustomerSupportEnvironment(task_id="easy")
     obs = env.reset()
     return obs.model_dump()
+
 
 @app.post("/step")
 def step(action: dict):
@@ -22,9 +26,9 @@ def step(action: dict):
         "observation": obs.model_dump(),
         "reward": reward.score,
         "done": done,
-        "info": info
+        "info": info,
     }
 
-# 🔥 THIS IS THE IMPORTANT PART
+
 def main():
     return app
