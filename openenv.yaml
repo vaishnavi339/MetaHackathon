@@ -15,7 +15,7 @@ reward_space:
 
 tasks:
   - id: easy
-    description: FAQ resolution
+    description: Easy FAQ resolution
   - id: medium
     description: Angry customer handling
   - id: hard

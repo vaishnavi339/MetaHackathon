@@ -6,13 +6,12 @@ import os
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
 HF_TOKEN = os.getenv("HF_TOKEN")
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 try:
     from openai import OpenAI
-except Exception as e:
+except Exception:
     print("[START] inference")
-    print("[END] success=false error=OpenAI_import_failed")
+    print("[END] success=false error=import_failed")
     raise SystemExit(0)
 
 
@@ -84,44 +83,43 @@ def _choose_action(client: OpenAI, prompt: str, action_cls) -> object:
 
 
 def main() -> None:
-    print("[START] inference")
-
-    if not HF_TOKEN:
-        _end_with_error("missing_token")
-
     try:
-        client = OpenAI(
-            base_url=API_BASE_URL,
-            api_key=HF_TOKEN,
-        )
-    except Exception as e:
-        _end_with_error("client_init_failed")
+        print("[START] inference")
 
-    try:
-        from env.environment import CustomerSupportEnvironment
-        from env.models import Action
-    except Exception:
-        _end_with_error("environment_import_failed")
+        if not HF_TOKEN:
+            _end_with_error("missing_token")
 
-    task_id = os.getenv("TASK_ID", "easy")
+        try:
+            client = OpenAI(
+                base_url=API_BASE_URL,
+                api_key=HF_TOKEN,
+            )
+        except Exception:
+            _end_with_error("client_init_failed")
 
-    try:
-        env = CustomerSupportEnvironment(task_id=task_id)
-        observation = env.reset()
-    except Exception:
-        _end_with_error("environment_init_failed")
+        try:
+            from env.environment import CustomerSupportEnvironment
+            from env.models import Action
+        except Exception:
+            _end_with_error("environment_import_failed")
 
-    final_score = "0.10"
-    success = False
-    max_steps = 5
+        task_id = os.getenv("TASK_ID", "easy")
 
-    try:
-        state = env.state()
-        max_steps = max(1, int(getattr(state, "max_steps", 5)))
-    except Exception:
-        max_steps = 5
+        try:
+            env = CustomerSupportEnvironment(task_id=task_id)
+            observation = env.reset()
+        except Exception:
+            _end_with_error("environment_init_failed")
 
-    try:
+        final_score = "0.10"
+        success = False
+
+        try:
+            state = env.state()
+            max_steps = max(1, int(getattr(state, "max_steps", 5)))
+        except Exception:
+            max_steps = 5
+
         for _ in range(max_steps):
             prompt = (
                 "Choose exactly one action from: reply, request_info, escalate. "
@@ -147,10 +145,12 @@ def main() -> None:
                 except Exception:
                     success = False
                 break
+
+        print(f"[END] success={'true' if success else 'false'} score={final_score}")
+    except SystemExit:
+        raise
     except Exception:
         _end_with_error("runtime_failure")
-
-    print(f"[END] success={'true' if success else 'false'} score={final_score}")
 
 
 if __name__ == "__main__":
@@ -160,5 +160,5 @@ if __name__ == "__main__":
         raise
     except Exception:
         print("[START] inference")
-        print("[END] success=false error=unexpected_failure")
+        print("[END] success=false error=runtime_failure")
         raise SystemExit(0)
