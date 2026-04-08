@@ -4,7 +4,7 @@ from typing import Dict, Optional, Tuple
 
 from pydantic import ValidationError
 
-from env.grader import normalize_score
+from env.grader import TASK_GRADERS, normalize_score
 from env.models import (
     Action,
     ActionType,
@@ -98,10 +98,10 @@ class CustomerSupportEnvironment:
             )
         )
 
-        task = TASKS.get(self.task_id)
+        grader = TASK_GRADERS.get(self.task_id)
 
         try:
-            score = task.grader(validated_action, self.state())
+            score = grader(validated_action, self.state()) if grader else 0.2
         except Exception:
             score = 0.2
 
@@ -133,7 +133,7 @@ class CustomerSupportEnvironment:
             repeated_action_penalty=0.05,
             excessive_step_penalty=0.05,
             step_decay=0.05,
-            reasoning="Direct task grader reward.",
+            reasoning="Mapped task grader reward.",
         )
 
     def _build_observation(self) -> Observation:
