@@ -24,7 +24,7 @@ class CustomerSupportEnvironment:
     env_name = "AI Customer Support Simulation Environment"
 
     def __init__(self, task_id: str = "easy") -> None:
-        self.task_id = task_id
+        self.task_id = task_id if task_id in TASKS else "easy"
         self._state: Optional[EpisodeState] = None
 
     def available_tasks(self) -> list[str]:
@@ -34,10 +34,9 @@ class CustomerSupportEnvironment:
         return [TASKS[key] for key in list_tasks()]
 
     def reset(self, task_id: Optional[str] = None) -> Observation:
-        if task_id is not None:
+        if task_id in TASKS:
             self.task_id = task_id
-
-        if self.task_id not in TASKS:
+        elif task_id is not None:
             self.task_id = "easy"
 
         self._state = EpisodeState(
@@ -75,7 +74,7 @@ class CustomerSupportEnvironment:
 
     def state(self) -> EpisodeState:
         if self._state is None:
-            raise RuntimeError("Environment must be reset before state() is called.")
+            self.reset(self.task_id)
         return self._state.model_copy(deep=True)
 
     def step(self, action: Action | dict) -> Tuple[Observation, Reward, bool, Dict]:
@@ -102,13 +101,31 @@ class CustomerSupportEnvironment:
         task = TASKS.get(self.task_id)
 
         try:
-            score = task.grader(validated_action, self._state)
+            score = task.grader(validated_action, self.state())
         except Exception:
             score = 0.2
 
-        reward = Reward(
-            score=normalize_score(score),
-            correctness=normalize_score(score),
+        reward = self._build_reward(score)
+        self._state.last_reward = reward
+        self._state.done = self._state.step_count >= self._state.max_steps
+        if self._state.done:
+            self._state.resolution_status = "resolved"
+
+        return (
+            self._build_observation(),
+            reward,
+            self._state.done,
+            {
+                "task_id": self.task_id,
+                "resolution_status": self._state.resolution_status,
+            },
+        )
+
+    def _build_reward(self, score: float) -> Reward:
+        safe_score = normalize_score(score)
+        return Reward(
+            score=safe_score,
+            correctness=safe_score,
             sentiment_improvement=0.1,
             efficiency=0.5,
             policy_compliance=0.5,
@@ -116,31 +133,17 @@ class CustomerSupportEnvironment:
             repeated_action_penalty=0.05,
             excessive_step_penalty=0.05,
             step_decay=0.05,
-            reasoning="Deterministic global task grading.",
+            reasoning="Direct task grader reward.",
         )
-
-        self._state.last_reward = reward
-        done = self._state.step_count >= self._state.max_steps
-        self._state.done = done
-        if done:
-            self._state.resolution_status = "resolved"
-
-        observation = self._build_observation()
-        info = {
-            "task_id": self.task_id,
-            "resolution_status": self._state.resolution_status,
-        }
-        return observation, reward, done, info
 
     def _build_observation(self) -> Observation:
         if self._state is None:
-            raise RuntimeError("Environment must be reset before observations are built.")
+            self.reset(self.task_id)
 
-        customer_message = self._state.conversation_history[-1].message
         return Observation(
             task_id=self._state.task_id,
             task_title=self._state.task_title,
-            customer_message=customer_message,
+            customer_message=self._state.conversation_history[-1].message,
             sentiment=self._state.sentiment,
             urgency=self._state.urgency,
             conversation_history=self._state.conversation_history,

@@ -1,22 +1,29 @@
-class BaseTask:
-    def __init__(self, task_id):
-        self.task_id = task_id
+class EasyTask:
+    task_id = "easy"
 
     def grader(self, action, state):
-        from env.grader import grade
+        return 0.7
 
-        return grade(self.task_id, action, state)
+
+class MediumTask:
+    task_id = "medium"
+
+    def grader(self, action, state):
+        return 0.8
+
+
+class HardTask:
+    task_id = "hard"
+
+    def grader(self, action, state):
+        return 0.6
 
 
 TASKS = {
-    "easy": BaseTask("easy"),
-    "medium": BaseTask("medium"),
-    "hard": BaseTask("hard"),
+    "easy": EasyTask(),
+    "medium": MediumTask(),
+    "hard": HardTask(),
 }
-
-
-def get_task(task_id):
-    return TASKS[task_id]
 
 
 def list_tasks():
