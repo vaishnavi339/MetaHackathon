@@ -13,20 +13,14 @@ def normalize_score(score: float) -> float:
 
 
 def grade_easy(action, state):
-    del action
-    del state
     return normalize_score(0.7)
 
 
 def grade_medium(action, state):
-    del action
-    del state
     return normalize_score(0.8)
 
 
 def grade_hard(action, state):
-    del action
-    del state
     return normalize_score(0.6)
 
 
