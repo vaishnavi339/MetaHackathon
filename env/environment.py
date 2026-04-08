@@ -5,7 +5,7 @@ from typing import Dict, Optional, Tuple
 
 from pydantic import ValidationError
 
-from env.grader import build_reward, extract_requested_info, terminal_success
+from env.grader import build_reward, extract_requested_info, normalize_score, terminal_success
 from env.models import (
     Action,
     ActionType,
@@ -16,7 +16,7 @@ from env.models import (
     Reward,
     Sentiment,
 )
-from env.tasks import SupportTask, get_task, list_tasks
+from env.tasks import SupportTask, TASKS, get_task, list_tasks
 
 
 class CustomerSupportEnvironment:
@@ -24,13 +24,16 @@ class CustomerSupportEnvironment:
 
     env_name = "AI Customer Support Simulation Environment"
 
-    def __init__(self, task_id: str = "easy_faq_resolution") -> None:
+    def __init__(self, task_id: str = "easy") -> None:
         self.task_id = task_id
         self.task = get_task(task_id)
         self._state: Optional[EpisodeState] = None
 
-    def available_tasks(self) -> list[SupportTask]:
+    def available_tasks(self) -> list[str]:
         return list_tasks()
+
+    def available_task_definitions(self) -> list[SupportTask]:
+        return [TASKS[key] for key in list_tasks()]
 
     def reset(self, task_id: Optional[str] = None) -> Observation:
         if task_id is not None:
@@ -134,7 +137,7 @@ class CustomerSupportEnvironment:
         self._state.step_count += 1
         step_decay = min(1.0, 0.05 * self._state.step_count)
         reward = Reward(
-            score=0.0,
+            score=normalize_score(0.0),
             correctness=0.0,
             sentiment_improvement=0.0,
             efficiency=max(0.0, (self._state.max_steps - self._state.step_count + 1) / max(1, self._state.max_steps)),

@@ -128,16 +128,20 @@ HARD_ESCALATION_TASK = SupportTask(
 )
 
 
+TASKS: Dict[str, SupportTask] = {
+    "easy": FAQ_TASK,
+    "medium": ANGRY_CUSTOMER_TASK,
+    "hard": HARD_ESCALATION_TASK,
+}
+
 TASK_REGISTRY: Dict[str, SupportTask] = {
-    FAQ_TASK.task_id: FAQ_TASK,
-    ANGRY_CUSTOMER_TASK.task_id: ANGRY_CUSTOMER_TASK,
-    HARD_ESCALATION_TASK.task_id: HARD_ESCALATION_TASK,
+    task.task_id: task
+    for task in TASKS.values()
 }
 
 TASK_ALIASES: Dict[str, str] = {
-    "easy": FAQ_TASK.task_id,
-    "medium": ANGRY_CUSTOMER_TASK.task_id,
-    "hard": HARD_ESCALATION_TASK.task_id,
+    difficulty: task.task_id
+    for difficulty, task in TASKS.items()
 }
 
 
@@ -148,5 +152,5 @@ def get_task(task_id: str) -> SupportTask:
     return TASK_REGISTRY[task_id]
 
 
-def list_tasks() -> List[SupportTask]:
-    return [TASK_REGISTRY[key] for key in sorted(TASK_REGISTRY)]
+def list_tasks() -> List[str]:
+    return ["easy", "medium", "hard"]

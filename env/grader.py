@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Dict, Iterable, Tuple
+from typing import Callable, Dict, Iterable, Tuple
 
 from env.models import Action, ActionType, EpisodeState, Reward, Sentiment
 from env.tasks import SupportTask
@@ -18,6 +18,15 @@ def _keyword_fraction(text: str, keywords: Iterable[str]) -> float:
         return 0.0
     matches = sum(1 for keyword in keyword_list if keyword in normalized)
     return min(1.0, matches / len(keyword_list))
+
+
+def normalize_score(score: float) -> float:
+    # clamp strictly inside (0,1)
+    if score <= 0.0:
+        return 0.05
+    if score >= 1.0:
+        return 0.95
+    return round(score, 4)
 
 
 def sentiment_to_score(sentiment: Sentiment) -> float:
@@ -159,8 +168,8 @@ def _easy_correctness(task: SupportTask, action: Action) -> float:
     if "email" in message and "link" in message:
         score = max(score, 0.9)
     if "sign-in page" in message and "email" in message and "link" in message:
-        score = 1.0
-    return min(1.0, score)
+        score = 0.95
+    return min(0.95, score)
 
 
 def _medium_correctness(task: SupportTask, action: Action) -> float:
@@ -174,7 +183,7 @@ def _medium_correctness(task: SupportTask, action: Action) -> float:
 
     if action.action_type == ActionType.REQUEST_INFO:
         if "order" in message and "number" in message:
-            return 1.0
+            return 0.95
         if "order" in message:
             return 0.6
     if action.action_type == ActionType.ESCALATE and "manager" in message:
@@ -201,24 +210,72 @@ def _hard_correctness(task: SupportTask, action: Action, state: EpisodeState) ->
         for key in remaining:
             if any(token in message for token in targets[key]):
                 covered += 1
-        return min(1.0, covered / len(remaining))
+        return min(0.95, covered / len(remaining))
 
     if action.action_type == ActionType.ESCALATE:
-        readiness = 1.0 if all(key in state.collected_info for key in task.required_info_keys) else 0.2
+        readiness = 0.95 if all(key in state.collected_info for key in task.required_info_keys) else 0.2
         context = 0.0
         if any(term in message for term in ["billing", "review", "duplicate", "refund"]):
             context = 0.2
-        return min(1.0, readiness + context)
+        return min(0.95, readiness + context)
 
     return 0.0
 
 
+def _grade_easy_task(task: SupportTask, action: Action, state: EpisodeState) -> float:
+    del state
+    action_correct = _easy_correctness(task, action)
+    response_relevant = _keyword_fraction(action.message or "", task.resolution_keywords)
+    efficient_steps = 1.0 if action.action_type == ActionType.REPLY else 0.2
+
+    score = 0.0
+    score += 0.5 * action_correct
+    score += 0.35 * response_relevant
+    score += 0.15 * efficient_steps
+    return normalize_score(score)
+
+
+def _grade_medium_task(task: SupportTask, action: Action, state: EpisodeState) -> float:
+    del state
+    action_correct = _medium_correctness(task, action)
+    response_relevant = _keyword_fraction(action.message or "", task.resolution_keywords + task.success_keywords)
+    sentiment_ready = _keyword_fraction(action.message or "", task.empathy_keywords)
+    efficient_steps = 1.0 if action.action_type in {ActionType.REPLY, ActionType.REQUEST_INFO} else 0.3
+
+    score = 0.0
+    score += 0.4 * action_correct
+    score += 0.25 * response_relevant
+    score += 0.25 * sentiment_ready
+    score += 0.1 * efficient_steps
+    return normalize_score(score)
+
+
+def _grade_hard_task(task: SupportTask, action: Action, state: EpisodeState) -> float:
+    action_correct = _hard_correctness(task, action, state)
+    response_relevant = _keyword_fraction(action.message or "", task.resolution_keywords + task.success_keywords)
+    info_progress = len(state.collected_info) / max(1, len(task.required_info_keys))
+    if action.action_type == ActionType.REQUEST_INFO:
+        info_progress = min(1.0, info_progress + 0.5)
+    efficient_steps = 1.0 if action.action_type in {ActionType.REQUEST_INFO, ActionType.ESCALATE} else 0.4
+
+    score = 0.0
+    score += 0.35 * action_correct
+    score += 0.25 * response_relevant
+    score += 0.25 * min(1.0, info_progress)
+    score += 0.15 * efficient_steps
+    return normalize_score(score)
+
+
+TASK_GRADERS: Dict[str, Callable[[SupportTask, Action, EpisodeState], float]] = {
+    "easy": _grade_easy_task,
+    "medium": _grade_medium_task,
+    "hard": _grade_hard_task,
+}
+
+
 def task_correctness(task: SupportTask, action: Action, state: EpisodeState) -> float:
-    if task.difficulty == "easy":
-        return round(_easy_correctness(task, action), 4)
-    if task.difficulty == "medium":
-        return round(_medium_correctness(task, action), 4)
-    return round(_hard_correctness(task, action, state), 4)
+    grader = TASK_GRADERS.get(task.difficulty, _grade_hard_task)
+    return grader(task, action, state)
 
 
 def build_reward(
@@ -248,10 +305,10 @@ def build_reward(
         + delayed_bonus
     )
     raw_score = weighted - wrong_penalty - repeat_penalty - step_pen - decay
-    score = max(0.0, min(1.0, raw_score))
+    score = normalize_score(raw_score)
 
     return Reward(
-        score=round(score, 4),
+        score=score,
         correctness=round(correctness, 4),
         sentiment_improvement=round(sentiment_gain, 4),
         efficiency=round(efficiency, 4),

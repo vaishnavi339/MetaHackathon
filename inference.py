@@ -144,7 +144,7 @@ def run_episode(task_id: str) -> None:
 
 if __name__ == "__main__":
     try:
-        run_episode(task_id=os.getenv("TASK_ID", "hard_multi_step_escalation"))
+        run_episode(task_id=os.getenv("TASK_ID", "hard"))
     except SystemExit:
         raise
     except Exception as e:
