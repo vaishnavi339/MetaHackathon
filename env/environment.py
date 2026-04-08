@@ -99,10 +99,11 @@ class CustomerSupportEnvironment:
             )
         )
 
+        grader = TASK_GRADERS.get(self.task_id)
+
         try:
-            grader = TASK_GRADERS.get(self.task_id)
             score = grader(validated_action, self.state()) if grader else 0.2
-        except Exception:
+        except:
             score = 0.2
 
         reward = self._build_reward(score)
@@ -133,7 +134,7 @@ class CustomerSupportEnvironment:
             repeated_action_penalty=0.05,
             excessive_step_penalty=0.05,
             step_decay=0.05,
-            reasoning="Global TASK_GRADERS reward.",
+            reasoning="TASK_GRADERS reward.",
         )
 
     def _build_observation(self) -> Observation:

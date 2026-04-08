@@ -1,7 +1,7 @@
-def normalize_score(score: float) -> float:
+def normalize_score(score):
     try:
         score = float(score)
-    except Exception:
+    except:
         return 0.1
 
     if score <= 0:
