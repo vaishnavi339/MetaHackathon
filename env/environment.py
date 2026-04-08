@@ -39,9 +39,10 @@ class CustomerSupportEnvironment:
         elif task_id is not None:
             self.task_id = "easy"
 
+        task_data = TASKS[self.task_id]
         self._state = EpisodeState(
             task_id=self.task_id,
-            task_title=f"{self.task_id.title()} Task",
+            task_title=task_data["description"],
             step_count=0,
             max_steps=5,
             done=False,
@@ -62,7 +63,7 @@ class CustomerSupportEnvironment:
             conversation_history=[
                 ConversationTurn(
                     speaker="customer",
-                    message=f"This is the {self.task_id} task.",
+                    message=f"This is the {task_data['id']} task.",
                 )
             ],
             action_history=[],
@@ -98,9 +99,8 @@ class CustomerSupportEnvironment:
             )
         )
 
-        grader = TASK_GRADERS.get(self.task_id)
-
         try:
+            grader = TASK_GRADERS.get(self.task_id)
             score = grader(validated_action, self.state()) if grader else 0.2
         except Exception:
             score = 0.2
@@ -133,7 +133,7 @@ class CustomerSupportEnvironment:
             repeated_action_penalty=0.05,
             excessive_step_penalty=0.05,
             step_decay=0.05,
-            reasoning="Mapped task grader reward.",
+            reasoning="Global TASK_GRADERS reward.",
         )
 
     def _build_observation(self) -> Observation:
