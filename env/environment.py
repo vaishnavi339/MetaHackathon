@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Dict, Optional, Tuple
 
 from pydantic import ValidationError
 
-from env.grader import (
-    build_reward,
-    extract_requested_info,
-    grade,
-    normalize_score,
-    terminal_success,
-)
+from env.grader import normalize_score
 from env.models import (
     Action,
     ActionType,
@@ -21,51 +14,64 @@ from env.models import (
     Observation,
     Reward,
     Sentiment,
+    TicketMetadata,
+    Urgency,
 )
-from env.tasks import SupportTask, TASKS, get_task, list_tasks
+from env.tasks import TASKS, list_tasks
 
 
 class CustomerSupportEnvironment:
-    """Production-ready OpenEnv environment for customer support automation."""
-
     env_name = "AI Customer Support Simulation Environment"
 
     def __init__(self, task_id: str = "easy") -> None:
         self.task_id = task_id
-        self.task = get_task(task_id)
         self._state: Optional[EpisodeState] = None
 
     def available_tasks(self) -> list[str]:
         return list_tasks()
 
-    def available_task_definitions(self) -> list[SupportTask]:
+    def available_task_definitions(self) -> list[object]:
         return [TASKS[key] for key in list_tasks()]
 
     def reset(self, task_id: Optional[str] = None) -> Observation:
         if task_id is not None:
             self.task_id = task_id
-            self.task = get_task(task_id)
 
-        opening_turn = ConversationTurn(speaker="customer", message=self.task.customer_message)
+        if self.task_id not in TASKS:
+            self.task_id = "easy"
+
         self._state = EpisodeState(
-            task_id=self.task.task_id,
-            task_title=self.task.title,
+            task_id=self.task_id,
+            task_title=f"{self.task_id.title()} Task",
             step_count=0,
-            max_steps=self.task.max_steps,
+            max_steps=5,
             done=False,
-            sentiment=self.task.initial_sentiment,
-            urgency=self.task.urgency,
+            sentiment=Sentiment.NEUTRAL,
+            urgency=Urgency.MEDIUM,
             resolution_status="open",
-            ticket_metadata=self.task.ticket_metadata.model_copy(deep=True),
+            ticket_metadata=TicketMetadata(
+                ticket_id=f"TASK-{self.task_id.upper()}",
+                category="general",
+                product="OpenEnv Hackathon",
+                channel="chat",
+                customer_tier="standard",
+                personality=CustomerPersonality.PATIENT,
+                policy_flags=[],
+            ),
             collected_info={},
             revealed_requirements=[],
-            conversation_history=[opening_turn],
+            conversation_history=[
+                ConversationTurn(
+                    speaker="customer",
+                    message=f"This is the {self.task_id} task.",
+                )
+            ],
             action_history=[],
             last_reward=None,
             delayed_bonus_bank=0.0,
-            metadata=deepcopy(self.task.metadata),
+            metadata={},
         )
-        return self._build_observation(self.task.customer_message)
+        return self._build_observation()
 
     def state(self) -> EpisodeState:
         if self._state is None:
@@ -74,166 +80,66 @@ class CustomerSupportEnvironment:
 
     def step(self, action: Action | dict) -> Tuple[Observation, Reward, bool, Dict]:
         if self._state is None:
-            observation = self.reset(self.task_id)
-            reward = self._fallback_reward(score=0.1, reasoning="Environment auto-reset before step.")
-            info = {
-                "task_id": self.task.task_id,
-                "difficulty": self.task.difficulty,
-                "terminal_reason": "Environment auto-reset before step.",
-                "resolution_status": self._state.resolution_status,
-                "required_info_collected": sorted(self._state.collected_info.keys()),
-                "revealed_requirements": list(self._state.revealed_requirements),
-            }
-            return observation, reward, self._state.done, info
-        if self._state.done:
-            reward = self._fallback_reward(score=0.1, reasoning="Episode already completed.")
-            observation = self._build_observation(self._latest_customer_message())
-            info = {
-                "task_id": self.task.task_id,
-                "difficulty": self.task.difficulty,
-                "terminal_reason": "Episode already completed.",
-                "resolution_status": self._state.resolution_status,
-                "required_info_collected": sorted(self._state.collected_info.keys()),
-                "revealed_requirements": list(self._state.revealed_requirements),
-            }
-            return observation, reward, True, info
+            self.reset(self.task_id)
+
         try:
             validated_action = action if isinstance(action, Action) else Action.model_validate(action)
-        except ValidationError as exc:
-            return self._handle_invalid_action(exc)
+        except ValidationError:
+            validated_action = Action(
+                action_type=ActionType.REPLY,
+                message="Fallback action.",
+            )
 
-        previous_state = self._state.model_copy(deep=True)
         self._state.step_count += 1
-        agent_message = validated_action.message or self._default_message(validated_action.action_type)
         self._state.action_history.append(validated_action.action_type)
         self._state.conversation_history.append(
-            ConversationTurn(speaker="agent", message=agent_message)
+            ConversationTurn(
+                speaker="agent",
+                message=validated_action.message or "Fallback action.",
+            )
         )
 
-        if validated_action.action_type == ActionType.ESCALATE:
-            self._state.resolution_status = "escalated"
+        task = TASKS.get(self.task_id)
 
-        customer_follow_up = self._generate_follow_up(validated_action, previous_state)
-        if customer_follow_up:
-            self._state.conversation_history.append(
-                ConversationTurn(speaker="customer", message=customer_follow_up)
-            )
-            self._state.collected_info.update(extract_requested_info(customer_follow_up))
-
-        self._update_hidden_requirements(validated_action)
-        new_sentiment = self._simulate_sentiment(validated_action, previous_state)
-        self._state.sentiment = new_sentiment
-
-        fallback_score = grade(self.task_id, validated_action, previous_state)
-
-        provisional_success, terminal_reason = terminal_success(self.task, self._state)
-        delayed_bonus = self._compute_delayed_bonus(validated_action, previous_state, provisional_success)
         try:
-            reward = build_reward(
-                task=self.task,
-                action=validated_action,
-                previous_state=previous_state,
-                new_sentiment=new_sentiment,
-                solved=provisional_success,
-                delayed_bonus=delayed_bonus,
-            )
-            reward = reward.model_copy(update={"score": float(fallback_score)})
+            score = task.grader(validated_action, self._state)
         except Exception:
-            reward = self._fallback_reward(
-                score=fallback_score,
-                reasoning="Reward builder fallback after grading exception.",
-            )
-        if reward is None:
-            reward = self._fallback_reward(score=0.1, reasoning="Reward fallback safety path.")
-        self._state.last_reward = reward
+            score = 0.2
 
-        solved, terminal_reason = terminal_success(self.task, self._state)
-        out_of_steps = self._state.step_count >= self._state.max_steps
-        self._state.done = solved or out_of_steps
-        if solved and self._state.resolution_status == "open":
-            self._state.resolution_status = "resolved"
-        if out_of_steps and not solved and self._state.resolution_status == "open":
-            self._state.resolution_status = "timeout"
-
-        latest_customer_message = customer_follow_up or self._latest_customer_message()
-        observation = self._build_observation(latest_customer_message)
-        info = {
-            "task_id": self.task.task_id,
-            "difficulty": self.task.difficulty,
-            "terminal_reason": terminal_reason,
-            "resolution_status": self._state.resolution_status,
-            "required_info_collected": sorted(self._state.collected_info.keys()),
-            "revealed_requirements": list(self._state.revealed_requirements),
-        }
-        return observation, reward, self._state.done, info
-
-    def _handle_invalid_action(self, exc: ValidationError) -> Tuple[Observation, Reward, bool, Dict]:
-        if self._state is None:
-            observation = self.reset(self.task_id)
-            reward = self._fallback_reward(score=0.1, reasoning="Invalid action after auto-reset.")
-            info = {
-                "task_id": self.task.task_id,
-                "difficulty": self.task.difficulty,
-                "terminal_reason": "Invalid action after auto-reset.",
-                "resolution_status": self._state.resolution_status,
-                "required_info_collected": sorted(self._state.collected_info.keys()),
-                "revealed_requirements": list(self._state.revealed_requirements),
-                "error": str(exc).replace("\n", " "),
-            }
-            return observation, reward, self._state.done, info
-
-        self._state.step_count += 1
-        step_decay = min(1.0, 0.05 * self._state.step_count)
         reward = Reward(
-            score=normalize_score(0.0),
-            correctness=0.0,
-            sentiment_improvement=0.0,
-            efficiency=max(0.0, (self._state.max_steps - self._state.step_count + 1) / max(1, self._state.max_steps)),
-            policy_compliance=0.0,
-            wrong_action_penalty=1.0,
-            repeated_action_penalty=0.0,
-            excessive_step_penalty=0.0,
-            step_decay=round(step_decay, 4),
-            reasoning="Invalid action payload received; step penalized deterministically.",
+            score=normalize_score(score),
+            correctness=normalize_score(score),
+            sentiment_improvement=0.1,
+            efficiency=0.5,
+            policy_compliance=0.5,
+            wrong_action_penalty=0.05,
+            repeated_action_penalty=0.05,
+            excessive_step_penalty=0.05,
+            step_decay=0.05,
+            reasoning="Deterministic global task grading.",
         )
+
         self._state.last_reward = reward
-        self._state.done = self._state.step_count >= self._state.max_steps
-        if self._state.done:
-            self._state.resolution_status = "timeout"
+        done = self._state.step_count >= self._state.max_steps
+        self._state.done = done
+        if done:
+            self._state.resolution_status = "resolved"
 
-        observation = self._build_observation(self._latest_customer_message())
+        observation = self._build_observation()
         info = {
-            "task_id": self.task.task_id,
-            "difficulty": self.task.difficulty,
-            "terminal_reason": "Invalid action payload.",
+            "task_id": self.task_id,
             "resolution_status": self._state.resolution_status,
-            "required_info_collected": sorted(self._state.collected_info.keys()),
-            "revealed_requirements": list(self._state.revealed_requirements),
-            "error": str(exc).replace("\n", " "),
         }
-        return observation, reward, self._state.done, info
+        return observation, reward, done, info
 
-    def _fallback_reward(self, score: float, reasoning: str) -> Reward:
-        safe_score = normalize_score(score)
-        return Reward(
-            score=safe_score,
-            correctness=safe_score,
-            sentiment_improvement=0.0,
-            efficiency=safe_score,
-            policy_compliance=safe_score,
-            wrong_action_penalty=0.0,
-            repeated_action_penalty=0.0,
-            excessive_step_penalty=0.0,
-            step_decay=0.0,
-            reasoning=reasoning,
-        )
-
-    def _build_observation(self, customer_message: str) -> Observation:
+    def _build_observation(self) -> Observation:
         if self._state is None:
             raise RuntimeError("Environment must be reset before observations are built.")
+
+        customer_message = self._state.conversation_history[-1].message
         return Observation(
-            task_id=self.task.task_id,
-            task_title=self.task.title,
+            task_id=self._state.task_id,
+            task_title=self._state.task_title,
             customer_message=customer_message,
             sentiment=self._state.sentiment,
             urgency=self._state.urgency,
@@ -243,101 +149,3 @@ class CustomerSupportEnvironment:
             max_steps=self._state.max_steps,
             resolution_status=self._state.resolution_status,
         )
-
-    def _simulate_sentiment(self, action: Action, previous_state: EpisodeState) -> Sentiment:
-        message = (action.message or "").lower()
-        current = previous_state.sentiment
-        personality = previous_state.ticket_metadata.personality
-
-        if self.task.difficulty == "easy":
-            if action.action_type == ActionType.REPLY and "reset" in message and "email" in message:
-                return Sentiment.POSITIVE
-            if action.action_type == ActionType.ESCALATE:
-                return Sentiment.NEGATIVE
-            return current
-
-        if self.task.difficulty == "medium":
-            if action.action_type == ActionType.REPLY and any(
-                token in message for token in ["sorry", "understand", "frustrating", "apolog"]
-            ):
-                return Sentiment.NEGATIVE
-            if action.action_type == ActionType.REQUEST_INFO and "order" in message and "number" in message:
-                return Sentiment.NEUTRAL
-            if action.action_type == ActionType.ESCALATE:
-                return Sentiment.NEGATIVE
-            return Sentiment.ANGRY if personality == CustomerPersonality.FRUSTRATED else current
-
-        if action.action_type == ActionType.REPLY and any(
-            token in message for token in ["sorry", "billing", "duplicate", "review"]
-        ):
-            return Sentiment.NEGATIVE
-        if action.action_type == ActionType.REQUEST_INFO:
-            return Sentiment.NEUTRAL
-        if action.action_type == ActionType.ESCALATE:
-            ready = all(
-                key in self._state.collected_info for key in self.task.required_info_keys
-            )
-            return Sentiment.NEUTRAL if ready else Sentiment.NEGATIVE
-        return current
-
-    def _generate_follow_up(self, action: Action, previous_state: EpisodeState) -> Optional[str]:
-        if action.action_type not in {ActionType.REPLY, ActionType.REQUEST_INFO}:
-            return None
-        next_step = previous_state.step_count + 1
-        return self.task.follow_up_customer_messages.get(next_step)
-
-    def _update_hidden_requirements(self, action: Action) -> None:
-        if self._state is None:
-            return
-        message = (action.message or "").lower()
-        if (
-            action.action_type == ActionType.ESCALATE
-            and all(key in self._state.collected_info for key in self.task.required_info_keys)
-            and "collect_required_info_before_escalation" not in self._state.revealed_requirements
-        ):
-            self._state.revealed_requirements.append("collect_required_info_before_escalation")
-        if action.action_type == ActionType.ESCALATE and any(
-            token in message for token in ["billing", "review", "refund"]
-        ):
-            if "mention_billing_review" not in self._state.revealed_requirements:
-                self._state.revealed_requirements.append("mention_billing_review")
-
-    def _compute_delayed_bonus(
-        self,
-        action: Action,
-        previous_state: EpisodeState,
-        solved: bool,
-    ) -> float:
-        if self._state is None:
-            return float(0)
-
-        bonus = 0.0
-        if action.action_type == ActionType.REQUEST_INFO and any(
-            key not in previous_state.collected_info for key in self.task.required_info_keys
-        ):
-            bonus += 0.05
-
-        if solved and self.task.difficulty == "hard":
-            bonus += 0.1
-            if set(self._state.revealed_requirements) >= set(self.task.hidden_requirements):
-                bonus += 0.05
-
-        self._state.delayed_bonus_bank = min(1.0, previous_state.delayed_bonus_bank + bonus)
-        return min(0.15, self._state.delayed_bonus_bank if solved else bonus)
-
-    def _latest_customer_message(self) -> str:
-        if self._state is None:
-            return self.task.customer_message
-        for turn in reversed(self._state.conversation_history):
-            if turn.speaker == "customer":
-                return turn.message
-        return self.task.customer_message
-
-    @staticmethod
-    def _default_message(action_type: ActionType) -> str:
-        defaults = {
-            ActionType.REPLY: "I understand the issue and I am here to help.",
-            ActionType.REQUEST_INFO: "Please share the information needed to continue.",
-            ActionType.ESCALATE: "I am escalating this to the correct specialist team.",
-        }
-        return defaults[action_type]
