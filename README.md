@@ -158,7 +158,7 @@ These baseline numbers are intended as reproducible sanity checks for local regr
 from env.environment import CustomerSupportEnvironment
 from env.models import Action
 
-env = CustomerSupportEnvironment(task_id="easy_faq_resolution")
+env = CustomerSupportEnvironment(task_id="easy")
 observation = env.reset()
 
 observation, reward, done, info = env.step(
@@ -209,7 +209,7 @@ docker run --rm \
   -e API_BASE_URL="$API_BASE_URL" \
   -e MODEL_NAME="$MODEL_NAME" \
   -e HF_TOKEN="$HF_TOKEN" \
-  -e TASK_ID="hard_multi_step_escalation" \
+  -e TASK_ID="hard" \
   ai-customer-support-env
 ```
 

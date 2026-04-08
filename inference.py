@@ -107,7 +107,7 @@ def run_episode(task_id: str) -> None:
     while not done:
         step_number += 1
         action = None
-        reward_value = 0.0
+        reward_value = 0.1
         error_text = "null"
 
         try:
@@ -120,17 +120,17 @@ def run_episode(task_id: str) -> None:
             except Exception:
                 success = False
         except SystemExit:
-            rewards.append(_format_reward(0.0))
+            rewards.append(_format_reward(0.1))
             print(
                 f"[STEP] step={step_number} action={_safe_action_name(action)} "
-                f"reward=0.00 done=true error=api_exit"
+                f"reward=0.10 done=true error=api_exit"
             )
             print(f"[END] success=false steps={step_number} rewards={','.join(rewards)}")
             raise
         except Exception as e:
             done = True
             error_text = str(e).replace("\n", " ").strip() or "unknown_error"
-            rewards.append(_format_reward(0.0))
+            rewards.append(_format_reward(0.1))
 
         done_text = "true" if done else "false"
         print(

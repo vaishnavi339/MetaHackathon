@@ -30,7 +30,7 @@ class SupportTask(BaseModel):
 
 
 FAQ_TASK = SupportTask(
-    task_id="easy_faq_resolution",
+    task_id="easy",
     title="Easy FAQ Resolution",
     difficulty="easy",
     description="Resolve a straightforward password reset ticket without escalation.",
@@ -55,7 +55,7 @@ FAQ_TASK = SupportTask(
 
 
 ANGRY_CUSTOMER_TASK = SupportTask(
-    task_id="medium_angry_customer",
+    task_id="medium",
     title="Medium Angry Customer Handling",
     difficulty="medium",
     description="Handle a delayed delivery complaint with empathy and targeted troubleshooting.",
@@ -88,7 +88,7 @@ ANGRY_CUSTOMER_TASK = SupportTask(
 
 
 HARD_ESCALATION_TASK = SupportTask(
-    task_id="hard_multi_step_escalation",
+    task_id="hard",
     title="Hard Multi-Step Escalation",
     difficulty="hard",
     description=(
@@ -134,22 +134,11 @@ TASKS: Dict[str, SupportTask] = {
     "hard": HARD_ESCALATION_TASK,
 }
 
-TASK_REGISTRY: Dict[str, SupportTask] = {
-    task.task_id: task
-    for task in TASKS.values()
-}
-
-TASK_ALIASES: Dict[str, str] = {
-    difficulty: task.task_id
-    for difficulty, task in TASKS.items()
-}
-
 
 def get_task(task_id: str) -> SupportTask:
-    task_id = TASK_ALIASES.get(task_id, task_id)
-    if task_id not in TASK_REGISTRY:
+    if task_id not in TASKS:
         raise KeyError(f"Unknown task_id: {task_id}")
-    return TASK_REGISTRY[task_id]
+    return TASKS[task_id]
 
 
 def list_tasks() -> List[str]:
