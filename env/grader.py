@@ -12,15 +12,15 @@ def normalize_score(score):
     return round(score, 4)
 
 
-def grade_easy(action, state):
+def grade_easy(response, expected):
     return normalize_score(0.7)
 
 
-def grade_medium(action, state):
+def grade_medium(response, expected):
     return normalize_score(0.8)
 
 
-def grade_hard(action, state):
+def grade_hard(response, expected):
     return normalize_score(0.6)
 
 
