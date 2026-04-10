@@ -10,10 +10,12 @@ env = CustomerSupportEnvironment(task_id="easy")
 
 
 @app.post("/reset")
-def reset():
+def reset(task_id: str = "easy"):
     global env
-    env = CustomerSupportEnvironment(task_id="easy")
-    obs = env.reset()
+    if task_id not in ["easy", "medium", "hard"]:
+        task_id = "easy"
+    env = CustomerSupportEnvironment(task_id=task_id)
+    obs = env.reset(task_id=task_id)
     return obs.model_dump()
 
 
