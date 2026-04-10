@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from typing import Any
+
+from fastapi import Body, FastAPI
 
 from env.environment import CustomerSupportEnvironment
 from env.models import Action
@@ -10,8 +12,10 @@ env = CustomerSupportEnvironment(task_id="easy")
 
 
 @app.post("/reset")
-def reset(task_id: str = "easy"):
+def reset(task_id: str = "easy", payload: dict[str, Any] | None = Body(default=None)):
     global env
+    if payload and isinstance(payload.get("task_id"), str):
+        task_id = payload["task_id"]
     if task_id not in ["easy", "medium", "hard"]:
         task_id = "easy"
     env = CustomerSupportEnvironment(task_id=task_id)
