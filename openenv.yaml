@@ -1,5 +1,7 @@
 id: customer-support-env
 name: Customer Support Environment
+version: "1.0.0"
+author: Vaishnavi Singh
 description: Real-world customer support simulation for training AI agents
 
 entrypoint: env.environment:CustomerSupportEnvironment
@@ -13,18 +15,38 @@ action_space:
 reward_space:
   type: Reward
 
+reward_range:
+  low: 0
+  high: 1
+
 tasks:
   - id: easy
-    description: Easy FAQ resolution
+    name: FAQ Resolution
+    difficulty: easy
+    description: Resolve a password reset question with accurate self-serve guidance.
+    max_steps: 5
     grader: env.grader:grade_easy
     grader_fn: env.grader:grade_easy
   - id: medium
-    description: Angry customer handling
+    name: Angry Customer Handling
+    difficulty: medium
+    description: De-escalate an upset customer and ask for the missing order details.
+    max_steps: 5
     grader: env.grader:grade_medium
     grader_fn: env.grader:grade_medium
   - id: hard
-    description: Multi-step escalation
+    name: Multi-Step Billing Escalation
+    difficulty: hard
+    description: Collect the required billing context and escalate at the right time.
+    max_steps: 5
     grader: env.grader:grade_hard
     grader_fn: env.grader:grade_hard
+
+endpoints:
+  reset: POST /reset
+  step: POST /step
+  state: POST /state
+  tasks: GET /tasks
+  grader: POST /grader
 
 max_steps: 8

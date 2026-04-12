@@ -16,7 +16,7 @@ from env.models import (
     TicketMetadata,
     Urgency,
 )
-from env.tasks import TASKS, list_tasks
+from env.tasks import TASKS, list_task_ids, list_tasks
 
 _ = TASK_GRADERS
 
@@ -29,10 +29,10 @@ class CustomerSupportEnvironment:
         self._state: Optional[EpisodeState] = None
 
     def available_tasks(self) -> list[str]:
-        return list_tasks()
+        return list_task_ids()
 
     def available_task_definitions(self) -> list[object]:
-        return [TASKS[key] for key in list_tasks()]
+        return list_tasks()
 
     def reset(self, task_id: Optional[str] = None) -> Observation:
         if task_id in TASKS:
@@ -45,7 +45,7 @@ class CustomerSupportEnvironment:
             task_id=self.task_id,
             task_title=task_data["description"],
             step_count=0,
-            max_steps=5,
+            max_steps=task_data["max_steps"],
             done=False,
             sentiment=Sentiment.NEUTRAL,
             urgency=Urgency.MEDIUM,
@@ -78,6 +78,14 @@ class CustomerSupportEnvironment:
         if self._state is None:
             self.reset(self.task_id)
         return self._state.model_copy(deep=True)
+
+    def task_definitions(self) -> list[dict]:
+        return [dict(task) for task in list_tasks()]
+
+    def get_episode_score(self) -> float:
+        if self._state is None or self._state.last_reward is None:
+            return normalize_score(0.1)
+        return normalize_score(self._state.last_reward.score)
 
     def step(self, action: Action | dict) -> Tuple[Observation, Reward, bool, Dict]:
         if self._state is None:
