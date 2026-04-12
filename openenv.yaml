@@ -16,9 +16,15 @@ reward_space:
 tasks:
   - id: easy
     description: Easy FAQ resolution
+    grader: env.grader:grade_easy
+    grader_fn: env.grader:grade_easy
   - id: medium
     description: Angry customer handling
+    grader: env.grader:grade_medium
+    grader_fn: env.grader:grade_medium
   - id: hard
     description: Multi-step escalation
+    grader: env.grader:grade_hard
+    grader_fn: env.grader:grade_hard
 
 max_steps: 8
