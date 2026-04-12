@@ -1,7 +1,10 @@
 def normalize_score(score):
     try:
         score = float(score)
-    except:
+    except Exception:
+        return 0.1
+
+    if score != score:
         return 0.1
 
     if score <= 0:
@@ -9,7 +12,12 @@ def normalize_score(score):
     if score >= 1:
         return 0.95
 
-    return round(score, 4)
+    rounded = round(score, 4)
+    if rounded <= 0:
+        return 0.05
+    if rounded >= 1:
+        return 0.95
+    return rounded
 
 
 def grade_easy(response, expected):
@@ -26,18 +34,29 @@ def grade_medium(response, expected):
     empathy_words = ['sorry', 'understand', 'frustrated', 'apologize', 'help']
     message = (response.message or '').lower()
     empathy_score = sum(1 for word in empathy_words if word in message) / len(empathy_words)
-    action_bonus = 0.4 if hasattr(response, 'action_type') and response.action_type == 'request_info' else 0.0
+    action_type = getattr(response, 'action_type', '')
+    action_name = getattr(action_type, 'value', str(action_type))
+    action_bonus = 0.4 if action_name == 'request_info' else 0.0
     score = 0.3 + 0.4 * empathy_score + action_bonus
     return normalize_score(score)
 
 
 def grade_hard(response, expected):
     """Multi-step: collect info then escalate."""
-    # Simulate step progress via expected state
-    collected = len(expected.get('collected_info', {}))
-    revealed = len(expected.get('revealed_requirements', []))
+    # Support both dict-like task state and EpisodeState objects.
+    if isinstance(expected, dict):
+        collected_info = expected.get('collected_info', {})
+        revealed_requirements = expected.get('revealed_requirements', [])
+    else:
+        collected_info = getattr(expected, 'collected_info', {})
+        revealed_requirements = getattr(expected, 'revealed_requirements', [])
+
+    collected = len(collected_info or {})
+    revealed = len(revealed_requirements or [])
     progress = min(0.8, 0.2 + 0.1 * collected + 0.1 * revealed)
-    if hasattr(response, 'action_type') and response.action_type == 'escalate' and progress > 0.4:
+    action_type = getattr(response, 'action_type', '')
+    action_name = getattr(action_type, 'value', str(action_type))
+    if action_name == 'escalate' and progress > 0.4:
         progress += 0.2
     score = progress
     return normalize_score(score)
