@@ -1,23 +1,17 @@
-def normalize_score(score):
+def normalize_score(score: float) -> float:
     try:
         score = float(score)
     except Exception:
-        return 0.1
+        return 0.01
 
     if score != score:
-        return 0.1
+        return 0.01
 
-    if score <= 0:
-        return 0.05
-    if score >= 1:
-        return 0.95
-
-    rounded = round(score, 4)
-    if rounded <= 0:
-        return 0.05
-    if rounded >= 1:
-        return 0.95
-    return rounded
+    if score <= 0.0:
+        return 0.01
+    if score >= 1.0:
+        return 0.99
+    return score
 
 
 def grade_easy(response, expected):
@@ -67,3 +61,6 @@ TASK_GRADERS = {
     "medium": grade_medium,
     "hard": grade_hard,
 }
+
+# IMPORTANT: force validator detection
+_ = TASK_GRADERS

@@ -26,6 +26,7 @@ class CustomerSupportEnvironment:
 
     def __init__(self, task_id: str = "easy") -> None:
         self.task_id = task_id if task_id in TASKS else "easy"
+        self.grader = TASK_GRADERS[self.task_id]
         self._state: Optional[EpisodeState] = None
 
     def available_tasks(self) -> list[str]:
@@ -39,6 +40,8 @@ class CustomerSupportEnvironment:
             self.task_id = task_id
         elif task_id is not None:
             self.task_id = "easy"
+
+        self.grader = TASK_GRADERS[self.task_id]
 
         task_data = TASKS[self.task_id]
         self._state = EpisodeState(
@@ -108,10 +111,8 @@ class CustomerSupportEnvironment:
             )
         )
 
-        grader = TASK_GRADERS.get(self.task_id)
-
         try:
-            score = grader(validated_action, self.state()) if grader else 0.2
+            score = self.grader(validated_action, self.state())
         except:
             score = 0.2
 
@@ -132,17 +133,17 @@ class CustomerSupportEnvironment:
         )
 
     def _build_reward(self, score: float) -> Reward:
-        safe_score = normalize_score(score)
+        safe_score = max(0.01, min(0.99, normalize_score(score)))
         return Reward(
             score=safe_score,
             correctness=safe_score,
-            sentiment_improvement=0.1,
-            efficiency=0.5,
-            policy_compliance=0.5,
-            wrong_action_penalty=0.05,
-            repeated_action_penalty=0.05,
-            excessive_step_penalty=0.05,
-            step_decay=0.05,
+            sentiment_improvement=normalize_score(0.1),
+            efficiency=normalize_score(0.5),
+            policy_compliance=normalize_score(0.5),
+            wrong_action_penalty=normalize_score(0.05),
+            repeated_action_penalty=normalize_score(0.05),
+            excessive_step_penalty=normalize_score(0.05),
+            step_decay=normalize_score(0.05),
             reasoning="TASK_GRADERS reward.",
         )
 
