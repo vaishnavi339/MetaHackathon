@@ -10,13 +10,13 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 try:
     from openai import OpenAI
 except Exception:
-    print("[START] inference")
-    print("[END] success=false error=import_failed")
+    print("[START] task=unknown env=customer-support-env model=unknown")
+    print("[END] success=false steps=0 rewards= error=import_failed")
     raise SystemExit(0)
 
 
 def _end_with_error(error: str) -> None:
-    print("[END] success=false error=" + error)
+    print(f"[END] success=false steps=0 rewards= error={error}")
     raise SystemExit(0)
 
 
@@ -84,8 +84,6 @@ def _choose_action(client: OpenAI, prompt: str, action_cls) -> object:
 
 def main() -> None:
     try:
-        print("[START] inference")
-
         if not HF_TOKEN:
             _end_with_error("missing_token")
 
@@ -104,6 +102,8 @@ def main() -> None:
             _end_with_error("environment_import_failed")
 
         task_id = os.getenv("TASK_ID", "easy")
+        env_name = "customer-support-env"
+        rewards: list[str] = []
 
         try:
             env = CustomerSupportEnvironment(task_id=task_id)
@@ -111,8 +111,10 @@ def main() -> None:
         except Exception:
             _end_with_error("environment_init_failed")
 
-        final_score = "0.10"
+        print(f"[START] task={task_id} env={env_name} model={MODEL_NAME}")
+
         success = False
+        step_num = 0
 
         try:
             state = env.state()
@@ -121,6 +123,7 @@ def main() -> None:
             max_steps = 5
 
         for _ in range(max_steps):
+            step_num += 1
             prompt = (
                 "Choose exactly one action from: reply, request_info, escalate. "
                 "Return strict JSON with action_type and message. "
@@ -128,15 +131,24 @@ def main() -> None:
                 f"Observation: {json.dumps(observation.model_dump(mode='json'), default=str)}"
             )
             action = _choose_action(client, prompt, Action)
-            print(f"[STEP] task={task_id} action={_safe_action_name(action)}")
+            step_action = _safe_action_name(action)
 
             try:
                 observation, reward, done, info = env.step(action)
-                final_score = _safe_score(getattr(reward, "score", 0.1))
+                step_score = _safe_score(getattr(reward, "score", 0.1))
+                rewards.append(step_score)
+                error = "null"
             except Exception:
-                final_score = _safe_score(0.1)
+                step_score = _safe_score(0.1)
+                rewards.append(step_score)
                 done = True
                 info = {}
+                error = "step_failed"
+
+            print(
+                f"[STEP] step={step_num} action={step_action} reward={step_score} "
+                f"done={'true' if done else 'false'} error={error}"
+            )
 
             if done:
                 try:
@@ -146,7 +158,8 @@ def main() -> None:
                     success = False
                 break
 
-        print(f"[END] success={'true' if success else 'false'} score={final_score}")
+        rewards_csv = ",".join(rewards)
+        print(f"[END] success={'true' if success else 'false'} steps={step_num} rewards={rewards_csv}")
     except SystemExit:
         raise
     except Exception:
@@ -159,6 +172,6 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception:
-        print("[START] inference")
-        print("[END] success=false error=runtime_failure")
+        print("[START] task=unknown env=customer-support-env model=unknown")
+        print("[END] success=false steps=0 rewards= error=runtime_failure")
         raise SystemExit(0)
